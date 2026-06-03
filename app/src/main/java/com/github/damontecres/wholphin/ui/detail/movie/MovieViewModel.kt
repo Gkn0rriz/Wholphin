@@ -173,9 +173,6 @@ class MovieViewModel
 
                 viewModelScope.launchIO {
                     try {
-                        Timber.d("WholphinLog: Starting Fast Parallel Scan...")
-
-                        // 1. Get the list of all Box Sets
                         val allBoxSets = api.itemsApi.getItems(
                             GetItemsRequest(
                                 userId = serverRepository.currentUser?.id,
@@ -186,8 +183,6 @@ class MovieViewModel
 
                         var foundBoxSetId: UUID? = null
 
-                        // 2. Parallel Search: Check 10 boxsets at a time to find the movie
-                        // We use chunked to avoid overwhelming the server with 205 simultaneous calls
                         allBoxSets.chunked(10).forEach { chunk ->
                             if (foundBoxSetId != null) return@forEach // Stop if we already found it
 
@@ -207,7 +202,6 @@ class MovieViewModel
                             foundBoxSetId = results.filterNotNull().firstOrNull()
                         }
 
-                        // 3. THE MISSING PIECE: Fetch siblings and Update UI State
                         if (foundBoxSetId != null) {
                             Timber.d("WholphinLog: Match found: $foundBoxSetId. Fetching siblings now...")
 
@@ -225,7 +219,7 @@ class MovieViewModel
                                 )
                             ).content.items
                                 .map { BaseItem(it) }
-                                .filter { it.id != itemId } // Exclude current movie
+                                .filter { it.id != itemId }
 
                             _state.update {
                                 it.copy(
@@ -233,9 +227,6 @@ class MovieViewModel
                                     collectionName = displayName
                                 )
                             }
-                            Timber.d("WholphinLog: State updated with ${siblings.size} siblings.")
-                        } else {
-                            Timber.d("WholphinLog: No collection found after full scan.")
                         }
 
                     } catch (ex: Exception) {
