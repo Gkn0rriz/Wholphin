@@ -448,7 +448,7 @@ fun MovieDetailsContent(
             state.collections.letNotEmpty { collections ->
                 item {
                     ItemRow(
-                        title = stringResource(R.string.collections),
+                        title = state.collectionName ?: stringResource(R.string.collections),
                         items = collections,
                         onClickItem = { index, item ->
                             position = COLLECTION_ROW

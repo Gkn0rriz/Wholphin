@@ -211,8 +211,11 @@ class MovieViewModel
                         if (foundBoxSetId != null) {
                             Timber.d("WholphinLog: Match found: $foundBoxSetId. Fetching siblings now...")
 
+                            val matchingBoxSet = allBoxSets.find { it.id == foundBoxSetId }
+                            val displayName = matchingBoxSet?.name ?: "Collection"
+
                             val siblings = api.itemsApi.getItems(
-                                org.jellyfin.sdk.model.api.request.GetItemsRequest(
+                                GetItemsRequest(
                                     userId = serverRepository.currentUser?.id,
                                     parentId = foundBoxSetId,
                                     fields = SlimItemFields,
@@ -225,7 +228,10 @@ class MovieViewModel
                                 .filter { it.id != itemId } // Exclude current movie
 
                             _state.update {
-                                it.copy(collections = siblings)
+                                it.copy(
+                                    collections = siblings,
+                                    collectionName = displayName
+                                )
                             }
                             Timber.d("WholphinLog: State updated with ${siblings.size} siblings.")
                         } else {
@@ -381,6 +387,7 @@ data class MovieState(
     val extras: List<ExtrasItem> = emptyList(),
     val similar: List<BaseItem> = emptyList(),
     val collections: List<BaseItem> = emptyList(),
+    val collectionName: String? = null,
     val discovered: List<DiscoverItem> = emptyList(),
     val chosenStreams: ChosenStreams? = null,
     val canDelete: Boolean = false,
