@@ -39,14 +39,22 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
+import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.MediaStreamType
+import org.jellyfin.sdk.model.api.SortOrder
+import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import org.jellyfin.sdk.model.api.request.GetSimilarItemsRequest
 import timber.log.Timber
 import java.util.UUID
@@ -158,6 +166,74 @@ class MovieViewModel
                         it.copy(
                             discovered = results,
                         )
+                    }
+                }
+
+                /* The Movie Collection fetch logic*/
+
+                viewModelScope.launchIO {
+                    try {
+                        Timber.d("WholphinLog: Starting Fast Parallel Scan...")
+
+                        // 1. Get the list of all Box Sets
+                        val allBoxSets = api.itemsApi.getItems(
+                            GetItemsRequest(
+                                userId = serverRepository.currentUser?.id,
+                                includeItemTypes = listOf(BaseItemKind.BOX_SET),
+                                recursive = true
+                            )
+                        ).content.items
+
+                        var foundBoxSetId: UUID? = null
+
+                        // 2. Parallel Search: Check 10 boxsets at a time to find the movie
+                        // We use chunked to avoid overwhelming the server with 205 simultaneous calls
+                        allBoxSets.chunked(10).forEach { chunk ->
+                            if (foundBoxSetId != null) return@forEach // Stop if we already found it
+
+                            val results = chunk.map { boxSet ->
+                                async {
+                                    val containsItem = api.itemsApi.getItems(
+                                        GetItemsRequest(
+                                            userId = serverRepository.currentUser?.id,
+                                            parentId = boxSet.id,
+                                            includeItemTypes = listOf(BaseItemKind.MOVIE)
+                                        )
+                                    ).content.items.any { it.id == itemId }
+                                    if (containsItem) boxSet.id else null
+                                }
+                            }.awaitAll()
+
+                            foundBoxSetId = results.filterNotNull().firstOrNull()
+                        }
+
+                        // 3. THE MISSING PIECE: Fetch siblings and Update UI State
+                        if (foundBoxSetId != null) {
+                            Timber.d("WholphinLog: Match found: $foundBoxSetId. Fetching siblings now...")
+
+                            val siblings = api.itemsApi.getItems(
+                                org.jellyfin.sdk.model.api.request.GetItemsRequest(
+                                    userId = serverRepository.currentUser?.id,
+                                    parentId = foundBoxSetId,
+                                    fields = SlimItemFields,
+                                    includeItemTypes = listOf(BaseItemKind.MOVIE),
+                                    sortBy = listOf(ItemSortBy.PREMIERE_DATE),
+                                    sortOrder = listOf(SortOrder.ASCENDING)
+                                )
+                            ).content.items
+                                .map { BaseItem(it) }
+                                .filter { it.id != itemId } // Exclude current movie
+
+                            _state.update {
+                                it.copy(collections = siblings)
+                            }
+                            Timber.d("WholphinLog: State updated with ${siblings.size} siblings.")
+                        } else {
+                            Timber.d("WholphinLog: No collection found after full scan.")
+                        }
+
+                    } catch (ex: Exception) {
+                        Timber.e(ex, "WholphinLog: Error during parallel scan")
                     }
                 }
 
@@ -304,6 +380,7 @@ data class MovieState(
     val chapters: List<Chapter> = emptyList(),
     val extras: List<ExtrasItem> = emptyList(),
     val similar: List<BaseItem> = emptyList(),
+    val collections: List<BaseItem> = emptyList(),
     val discovered: List<DiscoverItem> = emptyList(),
     val chosenStreams: ChosenStreams? = null,
     val canDelete: Boolean = false,

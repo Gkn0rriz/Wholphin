@@ -236,6 +236,20 @@ fun MovieDetails(
                 },
                 canDelete = state.canDelete,
                 onConfirmDelete = { state.movie?.let { viewModel.deleteItem(it) } },
+                onLongClickCollection = { index, collection ->
+                    showContextMenu =
+                        ContextMenu.ForBaseItem(
+                            fromLongClick = true,
+                            item = collection,
+                            chosenStreams = null,
+                            showGoTo = true,
+                            showStreamChoices = false,
+                            canDelete = false,
+                            canRemoveContinueWatching = false,
+                            canRemoveNextUp = false,
+                            actions = contextActions,
+                        )
+                },
                 modifier = modifier,
             )
         }
@@ -282,7 +296,8 @@ private const val PEOPLE_ROW = HEADER_ROW + 1
 private const val TRAILER_ROW = PEOPLE_ROW + 1
 private const val CHAPTER_ROW = TRAILER_ROW + 1
 private const val EXTRAS_ROW = CHAPTER_ROW + 1
-private const val SIMILAR_ROW = EXTRAS_ROW + 1
+private const val COLLECTION_ROW = EXTRAS_ROW + 1
+private const val SIMILAR_ROW = COLLECTION_ROW + 1
 private const val DISCOVER_ROW = SIMILAR_ROW + 1
 
 @Composable
@@ -304,6 +319,7 @@ fun MovieDetailsContent(
     onClickDiscover: (Int, DiscoverItem) -> Unit,
     canDelete: Boolean,
     onConfirmDelete: () -> Unit,
+    onLongClickCollection: (Int, BaseItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -426,6 +442,37 @@ fun MovieDetailsContent(
                             Modifier
                                 .fillMaxWidth()
                                 .focusRequester(focusRequesters[EXTRAS_ROW]),
+                    )
+                }
+            }
+            state.collections.letNotEmpty { collections ->
+                item {
+                    ItemRow(
+                        title = stringResource(R.string.collections),
+                        items = collections,
+                        onClickItem = { index, item ->
+                            position = COLLECTION_ROW
+                            onClickItem.invoke(index, item)
+                        },
+                        onLongClickItem = { index, collection ->
+                            position = COLLECTION_ROW
+                            onLongClickCollection.invoke(index, collection)
+                        },
+                        cardContent = { index, item, mod, onClick, onLongClick ->
+                            SeasonCard(
+                                item = item,
+                                onClick = onClick,
+                                onLongClick = onLongClick,
+                                modifier = mod,
+                                showImageOverlay = true,
+                                imageHeight = Cards.height2x3,
+                                imageWidth = Dp.Unspecified,
+                            )
+                        },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequesters[COLLECTION_ROW]),
                     )
                 }
             }
