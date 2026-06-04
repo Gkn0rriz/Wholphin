@@ -184,7 +184,7 @@ class MovieViewModel
                         var foundBoxSetId: UUID? = null
 
                         allBoxSets.chunked(10).forEach { chunk ->
-                            if (foundBoxSetId != null) return@forEach // Stop if we already found it
+                            if (foundBoxSetId != null) return@forEach // Stop if already found
 
                             val results = chunk.map { boxSet ->
                                 async {
@@ -219,7 +219,7 @@ class MovieViewModel
                                 )
                             ).content.items
                                 .map { BaseItem(it) }
-                                .filter { it.id != itemId }
+//                                .filter { it.id != itemId }
 
                             _state.update {
                                 it.copy(
